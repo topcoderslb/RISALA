@@ -1,0 +1,26 @@
+{
+  "name": "جمعية الرسالة للإسعاف الصحي",
+  "short_name": "الرسالة",
+  "description": "منصة إدارة جمعية الرسالة للإسعاف الصحي - المنطقة الثانية",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#065f46",
+  "theme_color": "#065f46",
+  "orientation": "portrait",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/risala.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/risala.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

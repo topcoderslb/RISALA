@@ -1,0 +1,438 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { collection, getDocs, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/lib/auth-context';
+import { Operation, Medic } from '@/lib/types';
+import { logAudit } from '@/lib/audit';
+import Modal from '@/components/Modal';
+import Button from '@/components/Button';
+import SearchFilter from '@/components/SearchFilter';
+import Pagination from '@/components/Pagination';
+import ImageUpload from '@/components/ImageUpload';
+import { Ambulance, Plus, Edit, Eye, FileDown, ImageIcon } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { exportOperationToPDF, exportOperationToImage } from '@/lib/pdf-utils';
+
+export default function CenterOperationsPage() {
+  const { profile } = useAuth();
+  const [operations, setOperations] = useState<Operation[]>([]);
+  const [filtered, setFiltered] = useState<Operation[]>([]);
+  const [medics, setMedics] = useState<Medic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editingOp, setEditingOp] = useState<Operation | null>(null);
+  const [selectedOp, setSelectedOp] = useState<Operation | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const pageSize = 15;
+
+  const [form, setForm] = useState({
+    approvalNumber: '',
+    type: 'EMS' as 'EMS' | 'RESCUE' | 'FIRE',
+    caseName: '',
+    date: '',
+    time: '',
+    location: '',
+    vehicleType: '',
+    vehicleNumber: '',
+    members: [] as string[],
+    report: '',
+    images: [] as string[],
+  });
+
+  useEffect(() => {
+    if (!profile?.centerId) return;
+    fetchData();
+  }, [profile]);
+
+  async function fetchData() {
+    try {
+      const [opsSnap, medicsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'operations'), where('centerId', '==', profile!.centerId))),
+        getDocs(query(collection(db, 'medics'), where('centerId', '==', profile!.centerId))),
+      ]);
+
+      const ops = opsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Operation[];
+      ops.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setOperations(ops);
+      setFiltered(ops);
+
+      const meds = medicsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Medic[];
+      setMedics(meds.filter((m) => m.status === 'active'));
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const generateCaseId = async (): Promise<string> => {
+    // Count existing operations for this center to get the next sequential number
+    const opsSnap = await getDocs(
+      query(collection(db, 'operations'), where('centerId', '==', profile!.centerId))
+    );
+    const seq = opsSnap.size + 1;
+    const sn = seq.toString().padStart(4, '0');
+    const centerName = profile!.centerName || 'مركز';
+    return `ALRISALA-${centerName}-${sn}`;
+  };
+
+  const openCreateModal = () => {
+    setEditingOp(null);
+    setForm({
+      approvalNumber: '',
+      type: 'EMS',
+      caseName: '',
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toTimeString().slice(0, 5),
+      location: '',
+      vehicleType: '',
+      vehicleNumber: '',
+      members: [],
+      report: '',
+      images: [],
+    });
+    setShowModal(true);
+  };
+
+  const openEditModal = (op: Operation) => {
+    setEditingOp(op);
+    setForm({
+      approvalNumber: op.approvalNumber,
+      type: op.type,
+      caseName: op.caseName,
+      date: op.date,
+      time: op.time,
+      location: op.location || '',
+      vehicleType: op.vehicleType || '',
+      vehicleNumber: op.vehicleNumber || '',
+      members: op.members || [],
+      report: op.report,
+      images: op.images || [],
+    });
+    setShowModal(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.approvalNumber.trim()) {
+      toast.error('رقم الموافقة مطلوب');
+      return;
+    }
+    if (!form.caseName.trim()) {
+      toast.error('اسم الحالة مطلوب');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const memberNames = form.members.map((id) => medics.find((m) => m.id === id)?.name || id);
+
+      if (editingOp) {
+        await updateDoc(doc(db, 'operations', editingOp.id), {
+          approvalNumber: form.approvalNumber.trim(),
+          type: form.type,
+          caseName: form.caseName.trim(),
+          date: form.date,
+          time: form.time,
+          location: form.location.trim(),
+          vehicleType: form.vehicleType.trim(),
+          vehicleNumber: form.vehicleNumber.trim(),
+          members: form.members,
+          memberNames,
+          report: form.report,
+          images: form.images,
+          status: 'completed',
+          updatedAt: now,
+        });
+        toast.success('تم تحديث الحالة');
+        logAudit(profile, 'update', 'operations', `تعديل حالة: ${form.caseName}`, editingOp.id);
+      } else {
+        await addDoc(collection(db, 'operations'), {
+          caseId: await generateCaseId(),
+          centerId: profile!.centerId,
+          centerName: profile!.centerName,
+          approvalNumber: form.approvalNumber.trim(),
+          type: form.type,
+          caseName: form.caseName.trim(),
+          date: form.date,
+          time: form.time,
+          location: form.location.trim(),
+          vehicleType: form.vehicleType.trim(),
+          vehicleNumber: form.vehicleNumber.trim(),
+          members: form.members,
+          memberNames,
+          report: form.report,
+          images: form.images,
+          status: 'completed',
+          createdAt: now,
+          updatedAt: now,
+          createdBy: profile!.uid,
+        });
+        toast.success('تم إضافة الحالة');
+        logAudit(profile, 'create', 'operations', `إضافة حالة جديدة: ${form.caseName}`);
+      }
+
+      setShowModal(false);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      toast.error('حدث خطأ');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSearch = (term: string) => {
+    if (!term) { setFiltered(operations); setCurrentPage(1); return; }
+    const lower = term.toLowerCase();
+    setFiltered(operations.filter((o) =>
+      o.caseName.toLowerCase().includes(lower) ||
+      o.caseId.toLowerCase().includes(lower) ||
+      o.approvalNumber.toLowerCase().includes(lower)
+    ));
+    setCurrentPage(1);
+  };
+
+  const handleFilter = (filters: Record<string, string>) => {
+    let result = [...operations];
+    if (filters.type) result = result.filter((o) => o.type === filters.type);
+    setFiltered(result);
+    setCurrentPage(1);
+  };
+
+  const toggleMember = (medicId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      members: prev.members.includes(medicId)
+        ? prev.members.filter((id) => id !== medicId)
+        : [...prev.members, medicId],
+    }));
+  };
+
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const typeLabel = (type: string) => {
+    if (type === 'EMS') return { label: 'إسعاف', color: 'bg-blue-100 text-blue-700' };
+    if (type === 'FIRE') return { label: 'إطفاء', color: 'bg-red-100 text-red-700' };
+    return { label: 'إنقاذ', color: 'bg-orange-100 text-orange-700' };
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">الحالات</h1>
+          <p className="text-slate-500 mt-1">إدارة حالات المركز</p>
+        </div>
+        <Button onClick={openCreateModal} icon={<Plus size={18} />}>
+          إضافة حالة
+        </Button>
+      </div>
+
+      <SearchFilter
+        searchPlaceholder="بحث بالاسم أو رقم الحالة أو رقم الموافقة..."
+        onSearch={handleSearch}
+        dateFilter
+        onDateFilter={(from, to) => {
+          if (!from || !to) { setFiltered(operations); return; }
+          setFiltered(operations.filter((o) => o.date >= from && o.date <= to));
+          setCurrentPage(1);
+        }}
+        filters={[
+          { label: 'النوع', key: 'type', options: [{ label: 'إسعاف', value: 'EMS' }, { label: 'إطفاء', value: 'FIRE' }, { label: 'إنقاذ', value: 'RESCUE' }] },
+        ]}
+        onFilterChange={handleFilter}
+      />
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500">رقم الحالة</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500">رقم الموافقة</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500">اسم الحالة</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500">النوع</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500">التاريخ</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginated.map((op) => (
+                <tr key={op.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td className="px-4 py-3 text-sm font-mono text-slate-600">{op.caseId}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600">{op.approvalNumber}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-slate-800">{op.caseName}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-1 rounded-full ${typeLabel(op.type).color}`}>
+                      {typeLabel(op.type).label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-500">{op.date}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setSelectedOp(op)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><Eye size={16} /></button>
+                      <button onClick={() => openEditModal(op)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><Edit size={16} /></button>
+                      <button onClick={() => exportOperationToPDF(op)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400" title="تصدير PDF"><FileDown size={16} /></button>
+                      <button onClick={() => exportOperationToImage(op)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400" title="تصدير صورة"><ImageIcon size={16} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {paginated.length === 0 && (
+          <div className="text-center py-12">
+            <Ambulance size={48} className="text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-400">لا توجد حالات</p>
+          </div>
+        )}
+      </div>
+
+      <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+
+      {/* Create/Edit Modal */}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editingOp ? 'تعديل حالة' : 'إضافة حالة جديدة'} size="xl">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">رقم الموافقة *</label>
+              <input type="text" value={form.approvalNumber} onChange={(e) => setForm({ ...form, approvalNumber: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">النوع *</label>
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'EMS' | 'RESCUE' | 'FIRE' })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="EMS">إسعاف</option>
+                <option value="FIRE">إطفاء</option>
+                <option value="RESCUE">إنقاذ</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">اسم الحالة *</label>
+              <input type="text" value={form.caseName} onChange={(e) => setForm({ ...form, caseName: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">التاريخ</label>
+              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">الوقت</label>
+              <input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">الموقع</label>
+            <input type="text" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">نوع السيارة</label>
+              <input type="text" value={form.vehicleType} onChange={(e) => setForm({ ...form, vehicleType: e.target.value })}
+                placeholder="مثال: سيارة إسعاف - تويوتا هايلكس"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1.5">رقم السيارة</label>
+              <input type="text" value={form.vehicleNumber} onChange={(e) => setForm({ ...form, vehicleNumber: e.target.value })}
+                placeholder="مثال: أ ب ج 1234"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" dir="ltr" />
+            </div>
+          </div>
+
+          {/* Members Selector */}
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">الأعضاء</label>
+            <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200 max-h-40 overflow-y-auto">
+              {medics.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => toggleMember(m.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    form.members.includes(m.id)
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:border-primary-300'
+                  }`}
+                >
+                  {m.name}
+                </button>
+              ))}
+              {medics.length === 0 && <p className="text-xs text-slate-400">لا يوجد مسعفين نشطين</p>}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">نوع الحالة</label>
+            <textarea value={form.report} onChange={(e) => setForm({ ...form, report: e.target.value })}
+              rows={4} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">الصور (اختياري)</label>
+            <ImageUpload images={form.images} onChange={(images) => setForm({ ...form, images })} />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button onClick={handleSave} loading={saving}>
+              {editingOp ? 'تحديث' : 'إضافة'}
+            </Button>
+            <Button variant="secondary" onClick={() => setShowModal(false)}>إلغاء</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Detail Modal */}
+      <Modal isOpen={!!selectedOp} onClose={() => setSelectedOp(null)} title={selectedOp ? `تفاصيل - ${selectedOp.caseId}` : ''} size="lg">
+        {selectedOp && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div><p className="text-xs text-slate-400">رقم الحالة</p><p className="font-medium">{selectedOp.caseId}</p></div>
+              <div><p className="text-xs text-slate-400">رقم الموافقة</p><p className="font-medium">{selectedOp.approvalNumber}</p></div>
+              <div><p className="text-xs text-slate-400">النوع</p><p className="font-medium">{typeLabel(selectedOp.type).label}</p></div>
+              <div><p className="text-xs text-slate-400">التاريخ</p><p className="font-medium">{selectedOp.date}</p></div>
+              <div><p className="text-xs text-slate-400">الوقت</p><p className="font-medium">{selectedOp.time}</p></div>
+              {selectedOp.vehicleType && <div><p className="text-xs text-slate-400">نوع السيارة</p><p className="font-medium">{selectedOp.vehicleType}</p></div>}
+              {selectedOp.vehicleNumber && <div><p className="text-xs text-slate-400">رقم السيارة</p><p className="font-medium" dir="ltr">{selectedOp.vehicleNumber}</p></div>}
+            </div>
+            {selectedOp.memberNames && selectedOp.memberNames.length > 0 && (
+              <div>
+                <p className="text-xs text-slate-400 mb-1">الأعضاء</p>
+                <div className="flex flex-wrap gap-2">{selectedOp.memberNames.map((n, i) => <span key={i} className="text-xs bg-slate-100 px-2 py-1 rounded-full">{n}</span>)}</div>
+              </div>
+            )}
+            {selectedOp.report && <div><p className="text-xs text-slate-400 mb-1">نوع الحالة</p><p className="text-sm bg-slate-50 p-3 rounded-xl">{selectedOp.report}</p></div>}
+            {selectedOp.images && selectedOp.images.length > 0 && (
+              <div>
+                <p className="text-xs text-slate-400 mb-2">الصور</p>
+                <div className="flex flex-wrap gap-2">{selectedOp.images.map((url, i) => <img key={i} src={url} alt="" className="w-24 h-24 rounded-xl object-cover" loading="lazy" />)}</div>
+              </div>
+            )}
+            <Button onClick={() => exportOperationToPDF(selectedOp)} icon={<FileDown size={16} />}>تصدير PDF</Button>
+            <Button onClick={() => exportOperationToImage(selectedOp)} icon={<ImageIcon size={16} />} variant="secondary">تصدير صورة</Button>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}

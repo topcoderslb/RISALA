@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============= Helper Functions =============
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && getUserData().role == 'superadmin';
+    }
+
+    function isCenterLeader() {
+      return isSignedIn() && getUserData().role == 'center_leader';
+    }
+
+    function isTrainer() {
+      return isSignedIn() && getUserData().role == 'trainer';
+    }
+
+    function isNotBlocked() {
+      return getUserData().isBlocked != true;
+    }
+
+    function ownsCenterId(centerId) {
+      return getUserData().centerId == centerId;
+    }
+
+    // ============= Users Collection =============
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSuperAdmin();
+      allow update: if isSuperAdmin() || request.auth.uid == userId;
+      allow delete: if isSuperAdmin();
+    }
+
+    // ============= Centers Collection =============
+    match /centers/{centerId} {
+      allow read: if isSignedIn();
+      allow create: if isSuperAdmin();
+      allow update: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && ownsCenterId(centerId));
+      allow delete: if isSuperAdmin();
+    }
+
+    // ============= Operations Collection =============
+    match /operations/{operationId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isCenterLeader()) && isNotBlocked();
+      allow update: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && resource.data.centerId == getUserData().centerId);
+      allow delete: if isSuperAdmin();
+    }
+
+    // ============= Medics Collection =============
+    match /medics/{medicId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isCenterLeader()) && isNotBlocked();
+      allow update: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && resource.data.centerId == getUserData().centerId);
+      allow delete: if isSuperAdmin();
+    }
+
+    // ============= Schedules Collection =============
+    match /schedules/{scheduleId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isCenterLeader()) && isNotBlocked();
+      allow update: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && resource.data.centerId == getUserData().centerId);
+      allow delete: if isSuperAdmin();
+    }
+
+    // ============= Training Sessions Collection =============
+    match /trainingSessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isTrainer()) && isNotBlocked();
+      allow update: if isSuperAdmin() || (isTrainer() && isNotBlocked() && resource.data.trainerId == request.auth.uid);
+      allow delete: if isSuperAdmin();
+    }
+
+    // ============= Event Collections =============
+    match /centerDamageEvents/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isCenterLeader()) && isNotBlocked();
+      allow delete: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && resource.data.centerId == getUserData().centerId);
+    }
+
+    match /vehicleDamageEvents/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isCenterLeader()) && isNotBlocked();
+      allow delete: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && resource.data.centerId == getUserData().centerId);
+    }
+
+    match /injuredMedicEvents/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isCenterLeader()) && isNotBlocked();
+      allow delete: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && resource.data.centerId == getUserData().centerId);
+    }
+
+    match /martyrMedicEvents/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isCenterLeader()) && isNotBlocked();
+      allow delete: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && resource.data.centerId == getUserData().centerId);
+    }
+
+    // ============= Center Info & Deployments =============
+    match /centerInfos/{infoId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isCenterLeader()) && isNotBlocked();
+      allow update: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && resource.data.centerId == getUserData().centerId);
+      allow delete: if isSuperAdmin();
+    }
+
+    match /deployments/{deployId} {
+      allow read: if isSignedIn();
+      allow create: if (isSuperAdmin() || isCenterLeader()) && isNotBlocked();
+      allow delete: if isSuperAdmin() || (isCenterLeader() && isNotBlocked() && resource.data.centerId == getUserData().centerId);
+    }
+
+    // ============= Audit Logs (read: superadmin only, write: any signed-in) =============
+    match /auditLogs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // ============= Login Sessions (read: superadmin, create/update: signed-in) =============
+    match /loginSessions/{sessionId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+  }
+}
