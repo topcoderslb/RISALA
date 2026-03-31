@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { Operation, Medic, Center } from '@/lib/types';
 import Button from '@/components/Button';
@@ -18,11 +19,12 @@ export default function CenterExportPage() {
     if (!profile?.centerId) return;
     setLoading(true);
     try {
+      const cid = profile.centerId!;
       const [opsSnap, medicsSnap, schedSnap, centerDoc] = await Promise.all([
-        getDocs(query(collection(db, 'operations'), where('centerId', '==', profile.centerId))),
-        getDocs(query(collection(db, 'medics'), where('centerId', '==', profile.centerId))),
-        getDocs(query(collection(db, 'schedules'), where('centerId', '==', profile.centerId))),
-        getDoc(doc(db, 'centers', profile.centerId)),
+        cachedGetDocs(query(collection(db, 'operations'), where('centerId', '==', cid)), `operations:${cid}`),
+        cachedGetDocs(query(collection(db, 'medics'), where('centerId', '==', cid)), `medics:${cid}`),
+        cachedGetDocs(query(collection(db, 'schedules'), where('centerId', '==', cid)), `schedules:${cid}`),
+        getDoc(doc(db, 'centers', cid)),
       ]);
 
       const operations = opsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Operation[];

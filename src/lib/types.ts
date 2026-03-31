@@ -297,4 +297,5 @@ export interface LoginSession {
   loginAt: string;
   lastActiveAt: string;
   isActive: boolean;
+  isDeviceBlocked?: boolean;
 }

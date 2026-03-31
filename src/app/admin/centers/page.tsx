@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { Center, UserProfile } from '@/lib/types';
 import Modal from '@/components/Modal';
@@ -37,8 +38,9 @@ export default function CentersPage() {
   }, []);
 
   async function fetchCenters() {
+    invalidateCachePrefix('centers');
     try {
-      const snap = await getDocs(collection(db, 'centers'));
+      const snap = await cachedGetDocs(collection(db, 'centers'), 'centers');
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Center[];
       setCenters(data);
       setFilteredCenters(data);

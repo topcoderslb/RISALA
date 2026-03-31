@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { Operation } from '@/lib/types';
 import Button from '@/components/Button';
@@ -23,7 +24,7 @@ export default function CenterReportsPage() {
     if (!profile?.centerId) return;
     async function fetch() {
       try {
-        const snap = await getDocs(query(collection(db, 'operations'), where('centerId', '==', profile!.centerId)));
+        const snap = await cachedGetDocs(query(collection(db, 'operations'), where('centerId', '==', profile!.centerId)), `operations:${profile!.centerId}`);
         setOperations(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Operation[]);
       } catch (error) { console.error(error); } finally { setLoading(false); }
     }

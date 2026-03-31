@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { TrainingFile, TrainingSession } from '@/lib/types';
 import SearchFilter from '@/components/SearchFilter';
 import Modal from '@/components/Modal';
@@ -25,10 +26,12 @@ export default function AdminTrainingPage() {
   }, []);
 
   async function fetchData() {
+    invalidateCachePrefix('trainingFiles');
+    invalidateCachePrefix('trainingSessions');
     try {
       const [filesSnap, sessionsSnap] = await Promise.all([
-        getDocs(collection(db, 'trainingFiles')),
-        getDocs(collection(db, 'trainingSessions')),
+        cachedGetDocs(collection(db, 'trainingFiles'), 'trainingFiles'),
+        cachedGetDocs(collection(db, 'trainingSessions'), 'trainingSessions'),
       ]);
 
       const allFiles = filesSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as TrainingFile[];

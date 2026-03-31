@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, query, where, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { CenterInfo, Deployment } from '@/lib/types';
@@ -18,6 +18,7 @@ export default function CenterInfoPage() {
   const [saving, setSaving] = useState(false);
   const [existingId, setExistingId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [infoExpanded, setInfoExpanded] = useState(false);
 
   const [form, setForm] = useState({
     townName: '',
@@ -89,16 +90,6 @@ export default function CenterInfoPage() {
       setDeployForm({ teamMembers: [''], location: '', date: '', vehicleInfo: '', notes: '' });
       fetchDeployments();
     } catch { toast.error('حدث خطأ'); } finally { setSaving(false); }
-  };
-
-  const deleteDeployment = async (id: string) => {
-    if (!confirm('هل تريد حذف سجل الانتشار؟')) return;
-    try {
-      await deleteDoc(doc(db, 'deployments', id));
-      toast.success('تم الحذف');
-      logAudit(profile!, 'delete', 'deployments', 'حذف سجل انتشار', id);
-      fetchDeployments();
-    } catch { toast.error('حدث خطأ أثناء الحذف'); }
   };
 
   async function fetchInfo() {
@@ -218,24 +209,44 @@ export default function CenterInfoPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">معلومات المركز</h1>
-          <p className="text-slate-500 mt-1">{profile?.centerName || 'المركز'}</p>
-        </div>
-        {isReadOnly && (
-          <div className="flex items-center gap-2">
-            <Button onClick={() => {
-              const info: CenterInfo = { id: existingId || '', centerId: profile!.centerId!, centerName: profile!.centerName || '', ...form, ambulanceNumbers: form.ambulanceNumbers.filter(Boolean), fireVehicleNumbers: form.fireVehicleNumbers.filter(Boolean), rescueVehicleNumbers: form.rescueVehicleNumbers.filter(Boolean), createdAt: '', updatedAt: '', createdBy: '' };
-              exportCenterInfoToPDF(info);
-            }} icon={<FileDown size={18} />} variant="secondary">تصدير PDF</Button>
-            <Button onClick={() => setEditMode(true)} icon={<Edit2 size={18} />}>تعديل</Button>
+      {/* Collapsible Center Info Card */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        {/* Toggle Header */}
+        <button
+          type="button"
+          onClick={() => setInfoExpanded(prev => !prev)}
+          className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
+              <Building2 size={18} className="text-primary-700" />
+            </div>
+            <div className="text-right">
+              <h1 className="text-lg font-bold text-slate-800">معلومات المركز</h1>
+              <p className="text-xs text-slate-400">{profile?.centerName || 'المركز'}</p>
+            </div>
           </div>
-        )}
-      </div>
+          <div className="flex items-center gap-2">
+            {isReadOnly && !infoExpanded && (
+              <span className="text-xs text-slate-400">اضغط للعرض</span>
+            )}
+            {infoExpanded ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
+          </div>
+        </button>
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-8">
+        {/* Collapsible Content */}
+        <div className={infoExpanded ? 'border-t border-slate-100 p-6 space-y-6' : 'hidden'}>
+          {/* Action buttons row */}
+          {isReadOnly && (
+            <div className="flex items-center justify-end gap-2">
+              <Button onClick={() => {
+                const info: CenterInfo = { id: existingId || '', centerId: profile!.centerId!, centerName: profile!.centerName || '', ...form, ambulanceNumbers: form.ambulanceNumbers.filter(Boolean), fireVehicleNumbers: form.fireVehicleNumbers.filter(Boolean), rescueVehicleNumbers: form.rescueVehicleNumbers.filter(Boolean), createdAt: '', updatedAt: '', createdBy: '' };
+                exportCenterInfoToPDF(info);
+              }} icon={<FileDown size={18} />} variant="secondary">تصدير PDF</Button>
+              <Button onClick={() => setEditMode(true)} icon={<Edit2 size={18} />}>تعديل</Button>
+            </div>
+          )}
+        <div className="space-y-8">
         {/* ─── Basic Info ─────────────────────────────────────────────────── */}
         <div>
           <div className="flex items-center gap-2 mb-4">
@@ -505,7 +516,9 @@ export default function CenterInfoPage() {
             )}
           </div>
         )}
-      </div>
+        </div>{/* end space-y-8 */}
+        </div>{/* end collapsible content */}
+      </div>{/* end card */}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/*  الانتشار (Deployment)                                            */}
@@ -547,9 +560,6 @@ export default function CenterInfoPage() {
                   <div className="flex gap-2">
                     <button onClick={() => exportDeploymentsToPDF([dep], profile?.centerName)} className="p-1.5 hover:bg-emerald-100 rounded-lg transition-colors" title="تصدير PDF">
                       <FileDown size={16} className="text-emerald-600" />
-                    </button>
-                    <button onClick={() => deleteDeployment(dep.id)} className="p-1.5 hover:bg-red-100 rounded-lg transition-colors" title="حذف">
-                      <Trash2 size={16} className="text-red-500" />
                     </button>
                   </div>
                 </div>

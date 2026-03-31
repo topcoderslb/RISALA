@@ -9,6 +9,17 @@ import { Operation, CenterDamageEvent, VehicleDamageEvent, InjuredMedicEvent, Ma
 async function htmlToPDF(html: string, filename: string): Promise<void> {
   const html2canvas = (await import('html2canvas')).default;
 
+  // Ensure Tajawal font is fully loaded before rendering
+  await document.fonts.ready;
+  try {
+    await Promise.all([
+      document.fonts.load('400 16px "Tajawal"'),
+      document.fonts.load('500 16px "Tajawal"'),
+      document.fonts.load('700 16px "Tajawal"'),
+      document.fonts.load('800 16px "Tajawal"'),
+    ]);
+  } catch {}
+
   // Preload the logo image before rendering
   await new Promise<void>((resolve) => {
     const img = new window.Image();
@@ -20,12 +31,12 @@ async function htmlToPDF(html: string, filename: string): Promise<void> {
 
   const container = document.createElement('div');
   container.style.cssText = [
-    'position:fixed',
+    'position:absolute',
     'left:-9999px',
     'top:0',
     'width:794px',
     'background:white',
-    "font-family:Tajawal,'Segoe UI',Tahoma,Arial,sans-serif",
+    "font-family:'Tajawal',sans-serif",
     'direction:rtl',
     'padding:0',
     'box-sizing:border-box',
@@ -35,12 +46,13 @@ async function htmlToPDF(html: string, filename: string): Promise<void> {
     '-webkit-font-smoothing:antialiased',
     'text-rendering:optimizeLegibility',
   ].join(';');
+
   container.innerHTML = html;
   document.body.appendChild(container);
 
-  // Wait for fonts & images to fully load
-  await document.fonts.ready;
-  await new Promise((r) => setTimeout(r, 500));
+  // Force layout so the browser shapes Arabic glyphs with the loaded font
+  container.getBoundingClientRect();
+  await new Promise((r) => setTimeout(r, 300));
 
   try {
     const canvas = await html2canvas(container, {

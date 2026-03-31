@@ -3,20 +3,23 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { useDailyReminder } from '@/lib/notifications';
 import StatCard from '@/components/StatCard';
-import { Ambulance, Users, Calendar, Activity, Download } from 'lucide-react';
+import { Ambulance, Users, Calendar, Download, Smartphone } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 export default function CenterDashboard() {
   const { profile } = useAuth();
-  const [stats, setStats] = useState({ operations: 0, medics: 0, schedules: 0, emsOps: 0, rescueOps: 0, pendingOps: 0, completedOps: 0 });
+  const [stats, setStats] = useState({ operations: 0, medics: 0, schedules: 0, emsOps: 0, rescueOps: 0 });
   const [centerImage, setCenterImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
     const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e); };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
@@ -29,11 +32,12 @@ export default function CenterDashboard() {
 
     async function fetchStats() {
       try {
+        const cid = profile!.centerId!;
         const [opsSnap, medicsSnap, schedulesSnap, centerDoc] = await Promise.all([
-          getDocs(query(collection(db, 'operations'), where('centerId', '==', profile!.centerId))),
-          getDocs(query(collection(db, 'medics'), where('centerId', '==', profile!.centerId))),
-          getDocs(query(collection(db, 'schedules'), where('centerId', '==', profile!.centerId))),
-          getDoc(doc(db, 'centers', profile!.centerId!)),
+          cachedGetDocs(query(collection(db, 'operations'), where('centerId', '==', cid)), `operations:${cid}`),
+          cachedGetDocs(query(collection(db, 'medics'), where('centerId', '==', cid)), `medics:${cid}`),
+          cachedGetDocs(query(collection(db, 'schedules'), where('centerId', '==', cid)), `schedules:${cid}`),
+          getDoc(doc(db, 'centers', cid)),
         ]);
         if (centerDoc.exists()) setCenterImage(centerDoc.data().image || null);
 
@@ -44,8 +48,6 @@ export default function CenterDashboard() {
           schedules: schedulesSnap.size,
           emsOps: ops.filter((o) => o.type === 'EMS').length,
           rescueOps: ops.filter((o) => o.type === 'RESCUE').length,
-          pendingOps: ops.filter((o) => o.status === 'pending').length,
-          completedOps: ops.filter((o) => o.status === 'completed').length,
         });
       } catch (error) {
         console.error(error);
@@ -90,22 +92,32 @@ export default function CenterDashboard() {
         </div>
       </div>
 
-      {/* Install App */}
-      {installPrompt && (
-        <button
-          onClick={async () => { installPrompt.prompt(); const r = await installPrompt.userChoice; if (r.outcome === 'accepted') setInstallPrompt(null); }}
-          className="w-full flex items-center justify-center gap-3 bg-gradient-to-l from-primary-700 to-primary-600 text-white rounded-xl py-3 px-6 font-bold shadow-lg hover:from-primary-800 hover:to-primary-700 transition-all"
-        >
-          <Download size={20} />
-          تثبيت التطبيق على جهازك
-        </button>
+      {/* Install App Card */}
+      {!isStandalone && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 text-center">
+          <div className="p-3 bg-primary-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
+            <Smartphone size={28} className="text-primary-700" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800 mb-2">تثبيت التطبيق</h3>
+          <p className="text-sm text-slate-500 mb-4">اضغط على الزر لتنزيل التطبيق على هاتفك والوصول إليه بسهولة</p>
+          {installPrompt ? (
+            <button
+              onClick={async () => { installPrompt.prompt(); const r = await installPrompt.userChoice; if (r.outcome === 'accepted') setInstallPrompt(null); }}
+              className="inline-flex items-center gap-2 bg-gradient-to-l from-primary-700 to-primary-600 text-white rounded-xl py-3 px-8 font-bold shadow-lg hover:from-primary-800 hover:to-primary-700 transition-all"
+            >
+              <Download size={20} />
+              تنزيل التطبيق
+            </button>
+          ) : (
+            <p className="text-xs text-slate-400">افتح الموقع من المتصفح للتنزيل أو استخدم خيار &quot;إضافة إلى الشاشة الرئيسية&quot;</p>
+          )}
+        </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="الحالات" value={stats.operations} icon={<Ambulance size={24} />} color="blue" />
         <StatCard title="المسعفين" value={stats.medics} icon={<Users size={24} />} color="green" />
         <StatCard title="الجداول" value={stats.schedules} icon={<Calendar size={24} />} color="purple" />
-        <StatCard title="قيد الانتظار" value={stats.pendingOps} icon={<Activity size={24} />} color="orange" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -127,14 +139,6 @@ export default function CenterDashboard() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
           <h3 className="text-lg font-bold text-slate-800 mb-4">ملخص</h3>
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
-              <span className="text-sm text-slate-600">عمليات مكتملة</span>
-              <span className="font-bold text-green-600">{stats.completedOps}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-xl">
-              <span className="text-sm text-slate-600">قيد الانتظار</span>
-              <span className="font-bold text-yellow-600">{stats.pendingOps}</span>
-            </div>
             <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
               <span className="text-sm text-slate-600">إسعاف</span>
               <span className="font-bold text-blue-600">{stats.emsOps}</span>
@@ -142,6 +146,10 @@ export default function CenterDashboard() {
             <div className="flex items-center justify-between p-3 bg-orange-50 rounded-xl">
               <span className="text-sm text-slate-600">إنقاذ</span>
               <span className="font-bold text-orange-600">{stats.rescueOps}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
+              <span className="text-sm text-slate-600">إجمالي الحالات</span>
+              <span className="font-bold text-green-600">{stats.operations}</span>
             </div>
           </div>
         </div>

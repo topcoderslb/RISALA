@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import StatCard from '@/components/StatCard';
-import { Building2, Ambulance, Users, GraduationCap, Activity, TrendingUp, Download } from 'lucide-react';
+import { Building2, Ambulance, Users, GraduationCap, Download, Smartphone } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 export default function AdminDashboard() {
@@ -18,13 +19,14 @@ export default function AdminDashboard() {
     emsOps: 0,
     rescueOps: 0,
     fireOps: 0,
-    completedOps: 0,
   });
   const [centerChartData, setCenterChartData] = useState<{ name: string; operations: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
     const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e); };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
@@ -34,18 +36,16 @@ export default function AdminDashboard() {
     async function fetchStats() {
       try {
         const [centersSnap, opsSnap, medicsSnap, trainingSnap] = await Promise.all([
-          getDocs(collection(db, 'centers')),
-          getDocs(collection(db, 'operations')),
-          getDocs(collection(db, 'medics')),
-          getDocs(collection(db, 'trainingSessions')),
+          cachedGetDocs(collection(db, 'centers'), 'centers'),
+          cachedGetDocs(collection(db, 'operations'), 'operations'),
+          cachedGetDocs(collection(db, 'medics'), 'medics'),
+          cachedGetDocs(collection(db, 'trainingSessions'), 'trainingSessions'),
         ]);
 
         const operations = opsSnap.docs.map((d) => d.data());
         const emsOps = operations.filter((o) => o.type === 'EMS').length;
         const rescueOps = operations.filter((o) => o.type === 'RESCUE').length;
         const fireOps = operations.filter((o) => o.type === 'FIRE').length;
-        const completedOps = operations.length;
-
         setStats({
           centers: centersSnap.size,
           operations: opsSnap.size,
@@ -54,7 +54,6 @@ export default function AdminDashboard() {
           emsOps,
           rescueOps,
           fireOps,
-          completedOps,
         });
 
         // Center chart data
@@ -82,11 +81,7 @@ export default function AdminDashboard() {
     { name: 'إطفاء', value: stats.fireOps, color: '#ef4444' },
   ];
 
-  const statusData = [
-    { name: 'إسعاف', value: stats.emsOps, color: '#3b82f6' },
-    { name: 'إنقاذ', value: stats.rescueOps, color: '#f59e0b' },
-    { name: 'إطفاء', value: stats.fireOps, color: '#ef4444' },
-  ];
+
 
   if (loading) {
     return (
@@ -106,21 +101,32 @@ export default function AdminDashboard() {
         />
         <div className="absolute inset-0 bg-gradient-to-l from-primary-950/80 via-primary-900/60 to-transparent" />
         <div className="relative h-full flex flex-col justify-end p-6">
-          <p className="text-emerald-300 text-sm font-medium mb-1">المسؤول العام</p>
+          <p className="text-emerald-300 text-sm font-medium mb-1">فضل عاصي — قائد المنطقة الثانية</p>
           <h1 className="text-3xl font-bold text-white">لوحة التحكم</h1>
           <p className="text-white/70 mt-1">مرحباً، {profile?.name}</p>
         </div>
       </div>
 
-      {/* Install App */}
-      {installPrompt && (
-        <button
-          onClick={async () => { installPrompt.prompt(); const r = await installPrompt.userChoice; if (r.outcome === 'accepted') setInstallPrompt(null); }}
-          className="w-full flex items-center justify-center gap-3 bg-gradient-to-l from-primary-700 to-primary-600 text-white rounded-xl py-3 px-6 font-bold shadow-lg hover:from-primary-800 hover:to-primary-700 transition-all"
-        >
-          <Download size={20} />
-          تثبيت التطبيق على جهازك
-        </button>
+      {/* Install App Card */}
+      {!isStandalone && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 text-center">
+          <div className="p-3 bg-primary-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
+            <Smartphone size={28} className="text-primary-700" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800 mb-2">تثبيت التطبيق</h3>
+          <p className="text-sm text-slate-500 mb-4">اضغط على الزر لتنزيل التطبيق على هاتفك والوصول إليه بسهولة</p>
+          {installPrompt ? (
+            <button
+              onClick={async () => { installPrompt.prompt(); const r = await installPrompt.userChoice; if (r.outcome === 'accepted') setInstallPrompt(null); }}
+              className="inline-flex items-center gap-2 bg-gradient-to-l from-primary-700 to-primary-600 text-white rounded-xl py-3 px-8 font-bold shadow-lg hover:from-primary-800 hover:to-primary-700 transition-all"
+            >
+              <Download size={20} />
+              تنزيل التطبيق
+            </button>
+          ) : (
+            <p className="text-xs text-slate-400">افتح الموقع من المتصفح للتنزيل أو استخدم خيار &quot;إضافة إلى الشاشة الرئيسية&quot;</p>
+          )}
+        </div>
       )}
 
       {/* Stats Grid */}
@@ -171,32 +177,6 @@ export default function AdminDashboard() {
                 <Tooltip />
                 <Bar dataKey="operations" fill="#3b82f6" radius={[8, 8, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Status Distribution */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <h3 className="text-lg font-bold text-slate-800 mb-4">توزيع الحالات</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={statusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {statusData.map((entry, index) => (
-                    <Cell key={`cell-s-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
             </ResponsiveContainer>
           </div>
         </div>

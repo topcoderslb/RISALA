@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { Schedule, Medic } from '@/lib/types';
 import { logAudit } from '@/lib/audit';
@@ -34,10 +35,12 @@ export default function CenterSchedulesPage() {
   }, [profile]);
 
   async function fetchData() {
+    invalidateCachePrefix('schedules');
     try {
+      const cid = profile!.centerId!;
       const [schedSnap, medicsSnap] = await Promise.all([
-        getDocs(query(collection(db, 'schedules'), where('centerId', '==', profile!.centerId))),
-        getDocs(query(collection(db, 'medics'), where('centerId', '==', profile!.centerId))),
+        cachedGetDocs(query(collection(db, 'schedules'), where('centerId', '==', cid)), `schedules:${cid}`),
+        cachedGetDocs(query(collection(db, 'medics'), where('centerId', '==', cid)), `medics:${cid}`),
       ]);
       setSchedules(schedSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Schedule[]);
       setMedics((medicsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Medic[]).filter((m) => m.status === 'active'));

@@ -5,7 +5,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import StatCard from '@/components/StatCard';
-import { GraduationCap, FolderOpen, FileText } from 'lucide-react';
+import { GraduationCap, FolderOpen, FileText, Download, Smartphone } from 'lucide-react';
 import Link from 'next/link';
 
 export default function TrainerDashboard() {
@@ -13,6 +13,15 @@ export default function TrainerDashboard() {
   const [totalFiles, setTotalFiles] = useState(0);
   const [totalSessions, setTotalSessions] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+    const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   useEffect(() => {
     if (!profile?.uid) return;
@@ -45,6 +54,28 @@ export default function TrainerDashboard() {
         <StatCard title="إجمالي الجلسات" value={totalSessions} icon={<GraduationCap size={24} />} color="blue" />
         <StatCard title="التقارير" value={totalSessions} icon={<FileText size={24} />} color="green" />
       </div>
+
+      {/* Install App Card */}
+      {!isStandalone && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 text-center">
+          <div className="p-3 bg-primary-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
+            <Smartphone size={28} className="text-primary-700" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800 mb-2">تثبيت التطبيق</h3>
+          <p className="text-sm text-slate-500 mb-4">اضغط على الزر لتنزيل التطبيق على هاتفك والوصول إليه بسهولة</p>
+          {installPrompt ? (
+            <button
+              onClick={async () => { installPrompt.prompt(); const r = await installPrompt.userChoice; if (r.outcome === 'accepted') setInstallPrompt(null); }}
+              className="inline-flex items-center gap-2 bg-gradient-to-l from-primary-700 to-primary-600 text-white rounded-xl py-3 px-8 font-bold shadow-lg hover:from-primary-800 hover:to-primary-700 transition-all"
+            >
+              <Download size={20} />
+              تنزيل التطبيق
+            </button>
+          ) : (
+            <p className="text-xs text-slate-400">افتح الموقع من المتصفح للتنزيل أو استخدم خيار &quot;إضافة إلى الشاشة الرئيسية&quot;</p>
+          )}
+        </div>
+      )}
 
       <Link href="/trainer/programs">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 text-center hover:shadow-md transition-shadow cursor-pointer">

@@ -132,6 +132,27 @@ export default function MonitoringPage() {
   }
 
   // ─── Block / Unblock ───────────────────────────────────────────────────────
+  const [blockingDevice, setBlockingDevice] = useState<string | null>(null);
+
+  async function toggleDeviceBlock(session: LoginSession) {
+    const newBlocked = !session.isDeviceBlocked;
+    const actionAr = newBlocked ? 'حظر' : 'إلغاء حظر';
+
+    if (!confirm(`هل أنت متأكد من ${actionAr} هذا الجهاز (${session.deviceType} - ${session.browser} - ${session.os})؟`)) return;
+
+    setBlockingDevice(session.id);
+    try {
+      await updateDoc(doc(db, 'loginSessions', session.id), { isDeviceBlocked: newBlocked, isActive: newBlocked ? false : session.isActive });
+      logAudit(profile!, newBlocked ? 'block' : 'unblock', 'loginSessions', `${actionAr} جهاز: ${session.userName} (${session.deviceType} ${session.browser})`, session.id);
+      toast.success(`تم ${actionAr} الجهاز`);
+      await fetchSessions();
+    } catch {
+      toast.error('حدث خطأ');
+    } finally {
+      setBlockingDevice(null);
+    }
+  }
+
   async function toggleBlock(user: UserProfile) {
     const newBlocked = !user.isBlocked;
     const action = newBlocked ? 'block' : 'unblock';
@@ -436,11 +457,17 @@ export default function MonitoringPage() {
                     onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${session.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                      <div className={`w-3 h-3 rounded-full ${session.isDeviceBlocked ? 'bg-red-500' : session.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
                       <div>
                         <span className="font-medium text-gray-800">{session.userName}</span>
                         {session.centerName && (
                           <span className="text-xs text-gray-500 mr-2">({session.centerName})</span>
+                        )}
+                        {session.isDeviceBlocked && (
+                          <span className="inline-flex items-center gap-1 mr-2 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <Lock size={10} />
+                            جهاز محظور
+                          </span>
                         )}
                       </div>
                     </div>
@@ -486,6 +513,25 @@ export default function MonitoringPage() {
                           <span className="text-xs text-gray-600 font-mono break-all">{session.userAgent}</span>
                         </div>
                       )}
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleDeviceBlock(session); }}
+                          disabled={blockingDevice === session.id}
+                          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition ${
+                            session.isDeviceBlocked
+                              ? 'bg-green-600 text-white hover:bg-green-700'
+                              : 'bg-red-600 text-white hover:bg-red-700'
+                          } disabled:opacity-50`}
+                        >
+                          {blockingDevice === session.id ? (
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
+                          ) : session.isDeviceBlocked ? (
+                            <><Unlock size={14} /> إلغاء حظر الجهاز</>
+                          ) : (
+                            <><Lock size={14} /> حظر هذا الجهاز</>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

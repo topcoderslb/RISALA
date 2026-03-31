@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, query, where, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { CenterDamageEvent, VehicleDamageEvent, InjuredMedicEvent, MartyrMedicEvent } from '@/lib/types';
 import { logAudit } from '@/lib/audit';
 import Modal from '@/components/Modal';
 import Button from '@/components/Button';
 import ImageUpload from '@/components/ImageUpload';
-import { Building2, Truck, HeartPulse, Star, Plus, Trash2, ChevronDown, ChevronUp, FileDown } from 'lucide-react';
+import { Building2, Truck, HeartPulse, Star, Plus, ChevronDown, ChevronUp, FileDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   exportCenterDamageToPDF, exportVehicleDamageToPDF,
@@ -53,13 +54,17 @@ export default function CenterEventsPage() {
   }, [profile]);
 
   async function fetchAll() {
+    invalidateCachePrefix('centerDamageEvents');
+    invalidateCachePrefix('vehicleDamageEvents');
+    invalidateCachePrefix('injuredMedicEvents');
+    invalidateCachePrefix('martyrMedicEvents');
     try {
       const cid = profile!.centerId;
       const [cdSnap, vdSnap, injSnap, martSnap] = await Promise.all([
-        getDocs(query(collection(db, 'centerDamageEvents'), where('centerId', '==', cid))),
-        getDocs(query(collection(db, 'vehicleDamageEvents'), where('centerId', '==', cid))),
-        getDocs(query(collection(db, 'injuredMedicEvents'), where('centerId', '==', cid))),
-        getDocs(query(collection(db, 'martyrMedicEvents'), where('centerId', '==', cid))),
+        cachedGetDocs(query(collection(db, 'centerDamageEvents'), where('centerId', '==', cid)), `centerDamageEvents:${cid}`),
+        cachedGetDocs(query(collection(db, 'vehicleDamageEvents'), where('centerId', '==', cid)), `vehicleDamageEvents:${cid}`),
+        cachedGetDocs(query(collection(db, 'injuredMedicEvents'), where('centerId', '==', cid)), `injuredMedicEvents:${cid}`),
+        cachedGetDocs(query(collection(db, 'martyrMedicEvents'), where('centerId', '==', cid)), `martyrMedicEvents:${cid}`),
       ]);
       setCenterDamages(cdSnap.docs.map(d => ({ id: d.id, ...d.data() })) as CenterDamageEvent[]);
       setVehicleDamages(vdSnap.docs.map(d => ({ id: d.id, ...d.data() })) as VehicleDamageEvent[]);
@@ -157,16 +162,6 @@ export default function CenterEventsPage() {
     } catch { toast.error('حدث خطأ'); } finally { setSaving(false); }
   };
 
-  const handleDelete = async (col: string, id: string) => {
-    if (!confirm('هل أنت متأكد من الحذف؟')) return;
-    try {
-      await deleteDoc(doc(db, col, id));
-      toast.success('تم الحذف');
-      logAudit(profile!, 'delete', col, 'حذف سجل حدث', id);
-      fetchAll();
-    } catch { toast.error('حدث خطأ'); }
-  };
-
   // ─── Labels ─────────────────────────────────────────────────────────────────
   const damageLevelLabel: Record<string, string> = { total: 'تدمير كامل', partial: 'تدمير جزئي', cracks: 'تصدعات وتكسر زجاج' };
   const attackTypeLabel: Record<string, string> = { direct: 'غارة مباشرة', nearby: 'غارة قريبة' };
@@ -230,7 +225,6 @@ export default function CenterEventsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={(e) => { e.stopPropagation(); exportCenterDamageToPDF(item); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-500"><FileDown size={16} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete('centerDamageEvents', item.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={16} /></button>
                   {expandedId === item.id ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
                 </div>
               </div>
@@ -271,7 +265,6 @@ export default function CenterEventsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={(e) => { e.stopPropagation(); exportVehicleDamageToPDF(item); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-500"><FileDown size={16} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete('vehicleDamageEvents', item.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={16} /></button>
                   {expandedId === item.id ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
                 </div>
               </div>
@@ -315,7 +308,6 @@ export default function CenterEventsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={(e) => { e.stopPropagation(); exportInjuredMedicToPDF(item); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-500"><FileDown size={16} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete('injuredMedicEvents', item.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={16} /></button>
                   {expandedId === item.id ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
                 </div>
               </div>
@@ -360,7 +352,6 @@ export default function CenterEventsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={(e) => { e.stopPropagation(); exportMartyrMedicToPDF(item); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-500"><FileDown size={16} /></button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete('martyrMedicEvents', item.id); }} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={16} /></button>
                   {expandedId === item.id ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
                 </div>
               </div>

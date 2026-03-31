@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { CenterInfo, Center, Deployment } from '@/lib/types';
 import Button from '@/components/Button';
@@ -47,11 +48,13 @@ export default function AdminCenterInfoPage() {
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
+    invalidateCachePrefix('centerInfos');
+    invalidateCachePrefix('deployments');
     try {
       const [infoSnap, centersSnap, deploySnap] = await Promise.all([
-        getDocs(collection(db, 'centerInfos')),
-        getDocs(collection(db, 'centers')),
-        getDocs(collection(db, 'deployments')),
+        cachedGetDocs(collection(db, 'centerInfos'), 'centerInfos'),
+        cachedGetDocs(collection(db, 'centers'), 'centers'),
+        cachedGetDocs(collection(db, 'deployments'), 'deployments'),
       ]);
       setCenterInfos(infoSnap.docs.map(d => ({ id: d.id, ...d.data() })) as CenterInfo[]);
       setCenters(centersSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Center[]);

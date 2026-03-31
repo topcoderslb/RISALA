@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { Operation, Medic, Center } from '@/lib/types';
 import SearchFilter from '@/components/SearchFilter';
@@ -47,10 +48,11 @@ export default function AdminOperationsPage() {
   }, []);
 
   async function fetchData() {
+    invalidateCachePrefix('operations');
     try {
       const [opsSnap, centersSnap] = await Promise.all([
-        getDocs(collection(db, 'operations')),
-        getDocs(collection(db, 'centers')),
+        cachedGetDocs(collection(db, 'operations'), 'operations'),
+        cachedGetDocs(collection(db, 'centers'), 'centers'),
       ]);
       const data = opsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Operation[];
       data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -68,7 +70,7 @@ export default function AdminOperationsPage() {
   useEffect(() => {
     if (!selectedCenterId) { setMedics([]); return; }
     async function fetchCenterMedics() {
-      const snap = await getDocs(query(collection(db, 'medics'), where('centerId', '==', selectedCenterId)));
+      const snap = await cachedGetDocs(query(collection(db, 'medics'), where('centerId', '==', selectedCenterId)), `medics:${selectedCenterId}`);
       const meds = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Medic[];
       setMedics(meds.filter((m) => m.status === 'active'));
     }
@@ -76,7 +78,7 @@ export default function AdminOperationsPage() {
   }, [selectedCenterId]);
 
   const generateCaseId = async (centerId: string, centerName: string): Promise<string> => {
-    const opsSnap = await getDocs(query(collection(db, 'operations'), where('centerId', '==', centerId)));
+    const opsSnap = await cachedGetDocs(query(collection(db, 'operations'), where('centerId', '==', centerId)), `operations:${centerId}`);
     const seq = opsSnap.size + 1;
     return `ALRISALA-${centerName}-${seq.toString().padStart(4, '0')}`;
   };

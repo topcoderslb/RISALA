@@ -21,10 +21,10 @@ import {
   ChevronLeft,
   AlertTriangle,
   Info,
-  Smartphone,
   Shield,
+  ImageIcon,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface NavItem {
   label: string;
@@ -37,39 +37,6 @@ export default function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isStandalone, setIsStandalone] = useState(false);
-
-  useEffect(() => {
-    // Check if already installed (running as standalone PWA)
-    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true);
-
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-
-  const handleInstall = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setDeferredPrompt(null);
-        setIsStandalone(true);
-      }
-    } else {
-      // Fallback: show instructions for manual install
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      if (isIOS) {
-        alert('لتنزيل التطبيق على iOS:\n1. اضغط على زر المشاركة (⬆️) في Safari\n2. اختر "إضافة إلى الشاشة الرئيسية"');
-      } else {
-        alert('لتنزيل التطبيق:\n1. اضغط على قائمة المتصفح (⋮)\n2. اختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية"');
-      }
-    }
-  };
 
   if (!profile) return null;
 
@@ -86,6 +53,7 @@ export default function Sidebar() {
         { label: 'معلومات المراكز', href: '/admin/center-info', icon: <Info size={20} /> },
         { label: 'التقارير', href: '/admin/reports', icon: <BarChart3 size={20} /> },
         { label: 'المراقبة', href: '/admin/monitoring', icon: <Shield size={20} /> },
+        { label: 'الصور', href: '/admin/photos', icon: <ImageIcon size={20} /> },
         { label: 'التصدير والنسخ', href: '/admin/backup', icon: <Download size={20} /> },
       ];
     }
@@ -99,6 +67,7 @@ export default function Sidebar() {
         { label: 'أحداث المركز', href: '/center/events', icon: <AlertTriangle size={20} /> },
         { label: 'معلومات المركز', href: '/center/info', icon: <Info size={20} /> },
         { label: 'التقارير', href: '/center/reports', icon: <BarChart3 size={20} /> },
+        { label: 'الصور', href: '/center/photos', icon: <ImageIcon size={20} /> },
         { label: 'التصدير', href: '/center/export', icon: <Download size={20} /> },
       ];
     }
@@ -121,7 +90,7 @@ export default function Sidebar() {
   };
 
   const roleLabels: Record<string, string> = {
-    superadmin: 'المسؤول العام',
+    superadmin: 'قائد المنطقة',
     center_leader: 'قائد مركز',
     trainer: 'مدرب',
   };
@@ -198,17 +167,8 @@ export default function Sidebar() {
           </ul>
         </nav>
 
-        {/* Install & Logout */}
+        {/* Logout */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-primary-700/50 space-y-1">
-          {!isStandalone && (
-            <button
-              onClick={handleInstall}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-white hover:bg-emerald-600 transition-all w-full bg-emerald-700 border border-emerald-600 shadow-sm"
-            >
-              <Smartphone size={20} />
-              <span>تنزيل التطبيق</span>
-            </button>
-          )}
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-300 hover:bg-red-500/10 hover:text-red-200 transition-all w-full"

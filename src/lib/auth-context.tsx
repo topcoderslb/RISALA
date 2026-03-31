@@ -91,6 +91,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const p: UserProfile = { ...data, uid: cred.user.uid };
 
+      /* ── Check if this device is blocked ─── */
+      const ua = navigator.userAgent;
+      const ip = await getClientIP();
+      const blockedSnap = await getDocs(query(
+        collection(db, 'loginSessions'),
+        where('userId', '==', cred.user.uid),
+        where('isDeviceBlocked', '==', true),
+      ));
+      for (const bDoc of blockedSnap.docs) {
+        const bd = bDoc.data();
+        if (bd.userAgent === ua || (ip && bd.ip === ip)) {
+          await signOut(auth);
+          throw new Error('تم حظر هذا الجهاز. تواصل مع قائد المنطقة.');
+        }
+      }
+
       /* ── Record login session (fire-and-forget) ─── */
       recordLoginSession(p);
       logAudit(p, 'login', 'auth', `تسجيل دخول: ${p.name} (${p.role})`);

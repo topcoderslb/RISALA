@@ -5,8 +5,8 @@ import { AuthProvider } from '@/lib/auth-context';
 import InstallPWA from '@/components/InstallPWA';
 
 export const metadata: Metadata = {
-  title: 'جمعية الرسالة للإسعاف الصحي - المنطقة الثانية',
-  description: 'منصة إدارة جمعية الرسالة للإسعاف الصحي - المنطقة الثانية',
+  title: 'المنطقة الثانية - جمعية الرسالة للإسعاف الصحي',
+  description: 'منصة إدارة المنطقة الثانية - جمعية الرسالة للإسعاف الصحي',
   manifest: '/manifest.json',
 };
 

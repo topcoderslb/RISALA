@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { CenterDamageEvent, VehicleDamageEvent, InjuredMedicEvent, MartyrMedicEvent, Center } from '@/lib/types';
 import Modal from '@/components/Modal';
@@ -45,18 +46,22 @@ export default function AdminEventsPage() {
 
   async function fetchCenters() {
     try {
-      const centersSnap = await getDocs(collection(db, 'centers'));
+      const centersSnap = await cachedGetDocs(collection(db, 'centers'), 'centers');
       setCenters(centersSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Center[]);
     } catch (error) { console.error('Error fetching centers:', error); }
   }
 
   async function fetchAll() {
+    invalidateCachePrefix('centerDamageEvents');
+    invalidateCachePrefix('vehicleDamageEvents');
+    invalidateCachePrefix('injuredMedicEvents');
+    invalidateCachePrefix('martyrMedicEvents');
     try {
       const [cdSnap, vdSnap, injSnap, martSnap] = await Promise.all([
-        getDocs(collection(db, 'centerDamageEvents')),
-        getDocs(collection(db, 'vehicleDamageEvents')),
-        getDocs(collection(db, 'injuredMedicEvents')),
-        getDocs(collection(db, 'martyrMedicEvents')),
+        cachedGetDocs(collection(db, 'centerDamageEvents'), 'centerDamageEvents'),
+        cachedGetDocs(collection(db, 'vehicleDamageEvents'), 'vehicleDamageEvents'),
+        cachedGetDocs(collection(db, 'injuredMedicEvents'), 'injuredMedicEvents'),
+        cachedGetDocs(collection(db, 'martyrMedicEvents'), 'martyrMedicEvents'),
       ]);
       setCenterDamages(cdSnap.docs.map(d => ({ id: d.id, ...d.data() })) as CenterDamageEvent[]);
       setVehicleDamages(vdSnap.docs.map(d => ({ id: d.id, ...d.data() })) as VehicleDamageEvent[]);

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { Medic } from '@/lib/types';
 import { logAudit } from '@/lib/audit';
@@ -28,8 +29,9 @@ export default function CenterMedicsPage() {
   }, [profile]);
 
   async function fetchMedics() {
+    invalidateCachePrefix('medics');
     try {
-      const snap = await getDocs(query(collection(db, 'medics'), where('centerId', '==', profile!.centerId)));
+      const snap = await cachedGetDocs(query(collection(db, 'medics'), where('centerId', '==', profile!.centerId)), `medics:${profile!.centerId}`);
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Medic[];
       setMedics(data);
       setFiltered(data);

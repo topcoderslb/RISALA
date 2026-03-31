@@ -21,7 +21,7 @@ const firebaseConfig = {
 // ---- غيّر هذه البيانات ----
 const ADMIN_EMAIL = 'admin@risala.com';
 const ADMIN_PASSWORD = 'Admin@123456';
-const ADMIN_NAME = 'المدير الأعلى';
+const ADMIN_NAME = 'فضل عاصي قائد المنطقة الثانية';
 // ----------------------------
 
 async function main() {
@@ -35,7 +35,7 @@ async function main() {
   }
 
   try {
-    console.log('🔄 جاري إنشاء حساب المدير الأعلى...');
+    console.log('🔄 جاري إنشاء حساب قائد المنطقة...');
 
     const cred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
     const uid = cred.user.uid;
@@ -50,7 +50,7 @@ async function main() {
       updatedAt: new Date().toISOString(),
     });
 
-    console.log('✅ تم إنشاء حساب المدير الأعلى بنجاح!');
+    console.log('✅ تم إنشاء حساب قائد المنطقة بنجاح!');
     console.log(`   البريد: ${ADMIN_EMAIL}`);
     console.log(`   كلمة المرور: ${ADMIN_PASSWORD}`);
     console.log(`   UID: ${uid}`);
@@ -70,7 +70,7 @@ async function main() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
-        console.log('✅ تم إنشاء بيانات المدير الأعلى بنجاح!');
+        console.log('✅ تم إنشاء بيانات قائد المنطقة بنجاح!');
         console.log(`   البريد: ${ADMIN_EMAIL}`);
         console.log(`   كلمة المرور: ${ADMIN_PASSWORD}`);
         console.log(`   UID: ${uid}`);

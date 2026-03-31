@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, updateDoc, deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { UserProfile } from '@/lib/types';
 import Modal from '@/components/Modal';
@@ -30,8 +31,9 @@ export default function TrainersPage() {
   }, []);
 
   async function fetchTrainers() {
+    invalidateCachePrefix('users');
     try {
-      const snap = await getDocs(collection(db, 'users'));
+      const snap = await cachedGetDocs(collection(db, 'users'), 'users');
       const all = snap.docs.map((d) => ({ ...d.data() })) as UserProfile[];
       const trainerList = all.filter((u) => u.role === 'trainer');
       setTrainers(trainerList);

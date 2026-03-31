@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { Medic, Center } from '@/lib/types';
 import Modal from '@/components/Modal';
@@ -29,10 +30,11 @@ export default function AdminMedicsPage() {
   }, []);
 
   async function fetchData() {
+    invalidateCachePrefix('medics');
     try {
       const [medicsSnap, centersSnap] = await Promise.all([
-        getDocs(collection(db, 'medics')),
-        getDocs(collection(db, 'centers')),
+        cachedGetDocs(collection(db, 'medics'), 'medics'),
+        cachedGetDocs(collection(db, 'centers'), 'centers'),
       ]);
       const data = medicsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Medic[];
       setMedics(data);

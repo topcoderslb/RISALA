@@ -17,10 +17,12 @@ export default function AdminBackupPage() {
       const collections = ['centers', 'operations', 'medics', 'schedules', 'trainingSessions', 'users'];
       const allData: Record<string, unknown[]> = {};
 
-      for (const col of collections) {
-        const snap = await getDocs(collection(db, col));
-        allData[col] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      }
+      const snaps = await Promise.all(
+        collections.map((col) => getDocs(collection(db, col)))
+      );
+      collections.forEach((col, i) => {
+        allData[col] = snaps[i].docs.map((d) => ({ id: d.id, ...d.data() }));
+      });
 
       if (format === 'json') {
         exportToJSON(allData, 'risala-backup-full');

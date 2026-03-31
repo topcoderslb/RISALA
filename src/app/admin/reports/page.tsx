@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs } from '@/lib/firebase-cache';
 import { Operation } from '@/lib/types';
 import Button from '@/components/Button';
 import { BarChart3, FileDown, Calendar } from 'lucide-react';
@@ -22,7 +23,7 @@ export default function AdminReportsPage() {
   useEffect(() => {
     async function fetch() {
       try {
-        const snap = await getDocs(collection(db, 'operations'));
+        const snap = await cachedGetDocs(collection(db, 'operations'), 'operations');
         setOperations(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Operation[]);
       } catch (error) {
         console.error(error);

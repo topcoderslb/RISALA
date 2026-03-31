@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { Operation, Medic } from '@/lib/types';
 import { logAudit } from '@/lib/audit';
@@ -48,10 +49,13 @@ export default function CenterOperationsPage() {
   }, [profile]);
 
   async function fetchData() {
+    invalidateCachePrefix('operations');
+    invalidateCachePrefix('medics');
     try {
+      const cid = profile!.centerId!;
       const [opsSnap, medicsSnap] = await Promise.all([
-        getDocs(query(collection(db, 'operations'), where('centerId', '==', profile!.centerId))),
-        getDocs(query(collection(db, 'medics'), where('centerId', '==', profile!.centerId))),
+        cachedGetDocs(query(collection(db, 'operations'), where('centerId', '==', cid)), `operations:${cid}`),
+        cachedGetDocs(query(collection(db, 'medics'), where('centerId', '==', cid)), `medics:${cid}`),
       ]);
 
       const ops = opsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Operation[];
@@ -69,11 +73,8 @@ export default function CenterOperationsPage() {
   }
 
   const generateCaseId = async (): Promise<string> => {
-    // Count existing operations for this center to get the next sequential number
-    const opsSnap = await getDocs(
-      query(collection(db, 'operations'), where('centerId', '==', profile!.centerId))
-    );
-    const seq = opsSnap.size + 1;
+    // Use already-loaded operations count instead of re-fetching
+    const seq = operations.length + 1;
     const sn = seq.toString().padStart(4, '0');
     const centerName = profile!.centerName || 'مركز';
     return `ALRISALA-${centerName}-${sn}`;
