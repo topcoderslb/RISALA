@@ -8,6 +8,10 @@ export const metadata: Metadata = {
   title: 'المنطقة الثانية - جمعية الرسالة للإسعاف الصحي',
   description: 'منصة إدارة المنطقة الثانية - جمعية الرسالة للإسعاف الصحي',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/risala.png',
+    apple: '/risala.png',
+  },
 };
 
 export const viewport: Viewport = {
