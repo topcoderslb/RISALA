@@ -1,2 +1,1 @@
-declare const styles: void;
-export default styles;
+declare module '*.css';
