@@ -23,12 +23,45 @@ async function loadLogoDataUrl(): Promise<string> {
   });
 }
 
+// ─── Font CSS builder ────────────────────────────────────────────────────────
+// Builds @font-face CSS with inline base64 data from already-loaded fonts.
+// This avoids getFontEmbedCSS which tries to re-fetch external Google Fonts
+// stylesheets and causes CORS / net::ERR_FAILED console errors.
+async function buildFontCSS(): Promise<string> {
+  const weights = [300, 400, 500, 700, 800, 900];
+  const faces: string[] = [];
+
+  for (const w of weights) {
+    try {
+      const url = `https://fonts.gstatic.com/s/tajawal/v9/Iura6YBj_oCad4k1nzSBC45I.woff2`;
+      const res = await fetch(url, { mode: 'cors' });
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        const b64 = btoa(binary);
+        faces.push(`@font-face{font-family:'Tajawal';font-weight:${w};src:url(data:font/woff2;base64,${b64}) format('woff2');}`);
+      }
+    } catch {
+      // If fetch fails, just declare the font-face without src
+      // The browser will still use the already-loaded font
+    }
+  }
+
+  if (faces.length === 0) {
+    // Fallback: just declare the font family so SVG foreignObject knows about it
+    return `@font-face{font-family:'Tajawal';src:local('Tajawal');}`;
+  }
+  return faces.join('\n');
+}
+
 // ─── Shared HTML-to-PDF renderer ─────────────────────────────────────────────
 // Uses html-to-image (SVG foreignObject) so the BROWSER renders Arabic text
 // natively with full ligature/shaping support. html2canvas cannot do this.
 
 async function htmlToPDF(html: string, filename: string): Promise<void> {
-  const { toPng, getFontEmbedCSS } = await import('html-to-image');
+  const { toPng } = await import('html-to-image');
 
   // Ensure Tajawal font is fully loaded before rendering
   await document.fonts.ready;
@@ -75,8 +108,9 @@ async function htmlToPDF(html: string, filename: string): Promise<void> {
   await new Promise((r) => setTimeout(r, 300));
 
   try {
-    // Embed fonts so SVG foreignObject has them inline
-    const fontCSS = await getFontEmbedCSS(container);
+    // Build font embed CSS from already-loaded fonts (avoids CORS fetch errors
+    // that getFontEmbedCSS causes with external Google Fonts stylesheets)
+    const fontCSS = await buildFontCSS();
 
     // Capture using SVG foreignObject — browser renders Arabic natively
     const dataUrl = await toPng(container, {
@@ -280,7 +314,7 @@ export async function exportReportToPDF(
 
 // ─── HTML to Image renderer ──────────────────────────────────────────────────
 async function htmlToImage(html: string, filename: string): Promise<void> {
-  const { toPng, getFontEmbedCSS } = await import('html-to-image');
+  const { toPng } = await import('html-to-image');
 
   await document.fonts.ready;
   try {
@@ -320,7 +354,7 @@ async function htmlToImage(html: string, filename: string): Promise<void> {
   await new Promise((r) => setTimeout(r, 300));
 
   try {
-    const fontCSS = await getFontEmbedCSS(container);
+    const fontCSS = await buildFontCSS();
     const dataUrl = await toPng(container, {
       width: 794,
       pixelRatio: 3,
