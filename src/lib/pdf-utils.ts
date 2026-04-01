@@ -140,13 +140,13 @@ function pdfHeader(title: string, subtitle?: string) {
   <div style="background:linear-gradient(135deg,#065f46 0%,#059669 50%,#10b981 100%);padding:0;margin:0;">
     <table style="width:100%;border-collapse:collapse;direction:rtl;" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="width:130px;padding:24px 24px 24px 0;vertical-align:middle;text-align:center;">
-          <img src="/risala.png" crossorigin="anonymous" style="width:90px;height:90px;border-radius:50%;object-fit:contain;background:white;padding:8px;" />
+        <td style="width:160px;padding:32px 28px 32px 0;vertical-align:middle;text-align:center;">
+          <img src="/risala.png" crossorigin="anonymous" style="width:110px;height:110px;border-radius:16px;object-fit:contain;background:white;padding:10px;" />
         </td>
-        <td style="padding:24px 8px 24px 24px;vertical-align:middle;">
-          <div style="color:#d1fae5;font-size:14px;margin-bottom:6px;font-weight:600;">جمعية الرسالة للإسعاف الصحي - المنطقة الثانية</div>
-          <div style="color:white;font-size:26px;font-weight:900;margin:4px 0;">${title}</div>
-          ${subtitle ? `<div style="color:#a7f3d0;font-size:14px;font-weight:600;margin-top:6px;">${subtitle}</div>` : ''}
+        <td style="padding:32px 12px 32px 28px;vertical-align:middle;">
+          <div style="color:#d1fae5;font-size:16px;margin-bottom:8px;font-weight:600;">جمعية الرسالة للإسعاف الصحي - المنطقة الثانية</div>
+          <div style="color:white;font-size:32px;font-weight:900;margin:6px 0;">${title}</div>
+          ${subtitle ? `<div style="color:#a7f3d0;font-size:16px;font-weight:600;margin-top:8px;">${subtitle}</div>` : ''}
         </td>
       </tr>
     </table>
@@ -183,7 +183,7 @@ function typeLabel(type: string) {
   return 'إنقاذ';
 }
 function typeBadge(type: string) {
-  return `<span style="display:inline-block;background:${typeColor(type)};color:white;padding:6px 24px;border-radius:20px;font-size:14px;font-weight:700;text-align:center;min-width:60px;">${typeLabel(type)}</span>`;
+  return `<table style="border-collapse:collapse;display:inline-table;"><tr><td style="background:${typeColor(type)};color:white;padding:8px 28px;border-radius:20px;font-size:14px;font-weight:700;text-align:center;min-width:70px;line-height:1.4;">${typeLabel(type)}</td></tr></table>`;
 }
 function row(label: string, value: string) {
   return `<tr>
