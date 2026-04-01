@@ -140,13 +140,13 @@ function pdfHeader(title: string, subtitle?: string) {
   <div style="background:linear-gradient(135deg,#065f46 0%,#059669 50%,#10b981 100%);padding:0;margin:0;">
     <table style="width:100%;border-collapse:collapse;direction:rtl;" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="width:160px;padding:32px 28px 32px 0;vertical-align:middle;text-align:center;">
-          <img src="/risala.png" crossorigin="anonymous" style="width:110px;height:110px;border-radius:16px;object-fit:contain;background:white;padding:10px;" />
+        <td style="width:190px;padding:36px 32px 36px 16px;vertical-align:middle;text-align:center;">
+          <img src="/risala.png" crossorigin="anonymous" style="width:140px;height:140px;border-radius:20px;object-fit:contain;background:white;padding:12px;" />
         </td>
-        <td style="padding:32px 12px 32px 28px;vertical-align:middle;">
-          <div style="color:#d1fae5;font-size:16px;margin-bottom:8px;font-weight:600;">جمعية الرسالة للإسعاف الصحي - المنطقة الثانية</div>
-          <div style="color:white;font-size:32px;font-weight:900;margin:6px 0;">${title}</div>
-          ${subtitle ? `<div style="color:#a7f3d0;font-size:16px;font-weight:600;margin-top:8px;">${subtitle}</div>` : ''}
+        <td style="padding:36px 16px 36px 32px;vertical-align:middle;">
+          <div style="color:#d1fae5;font-size:20px;margin-bottom:10px;font-weight:700;">جمعية الرسالة للإسعاف الصحي - المنطقة الثانية</div>
+          <div style="color:white;font-size:40px;font-weight:900;margin:8px 0;line-height:1.2;">${title}</div>
+          ${subtitle ? `<div style="color:#a7f3d0;font-size:20px;font-weight:700;margin-top:10px;">${subtitle}</div>` : ''}
         </td>
       </tr>
     </table>
@@ -183,12 +183,12 @@ function typeLabel(type: string) {
   return 'إنقاذ';
 }
 function typeBadge(type: string) {
-  return `<table style="border-collapse:collapse;display:inline-table;"><tr><td style="background:${typeColor(type)};color:white;padding:8px 28px;border-radius:20px;font-size:14px;font-weight:700;text-align:center;min-width:70px;line-height:1.4;">${typeLabel(type)}</td></tr></table>`;
+  return `<table style="border-collapse:collapse;display:inline-table;"><tr><td style="background:${typeColor(type)};color:white;padding:10px 36px;border-radius:24px;font-size:17px;font-weight:800;text-align:center;min-width:90px;line-height:1.4;">${typeLabel(type)}</td></tr></table>`;
 }
 function row(label: string, value: string) {
   return `<tr>
-    <td style="padding:14px 24px;font-size:14px;color:#475569;border-bottom:1px solid #f1f5f9;width:35%;white-space:nowrap;background:#fafbfc;font-weight:700;">${label}</td>
-    <td style="padding:14px 24px;font-size:15px;font-weight:600;color:#1e293b;border-bottom:1px solid #f1f5f9;word-break:break-word;overflow-wrap:break-word;">${value}</td>
+    <td style="padding:18px 28px;font-size:17px;color:#475569;border-bottom:1px solid #f1f5f9;width:35%;white-space:nowrap;background:#fafbfc;font-weight:800;">${label}</td>
+    <td style="padding:18px 28px;font-size:18px;font-weight:600;color:#1e293b;border-bottom:1px solid #f1f5f9;word-break:break-word;overflow-wrap:break-word;">${value}</td>
   </tr>`;
 }
 
