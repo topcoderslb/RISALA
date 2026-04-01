@@ -1,69 +1,26 @@
 import jsPDF from 'jspdf';
 import { Operation, CenterDamageEvent, VehicleDamageEvent, InjuredMedicEvent, MartyrMedicEvent, CenterInfo, Deployment } from './types';
 
-// ─── Logo pre-loader ─────────────────────────────────────────────────────────
-// Converts the logo to a data URL so html-to-image can embed it in the SVG
-async function loadLogoDataUrl(): Promise<string> {
-  return new Promise<string>((resolve) => {
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const c = document.createElement('canvas');
-        c.width = img.naturalWidth;
-        c.height = img.naturalHeight;
-        c.getContext('2d')!.drawImage(img, 0, 0);
-        resolve(c.toDataURL('image/png'));
-      } catch {
-        resolve('/risala.png');
-      }
-    };
-    img.onerror = () => resolve('/risala.png');
-    img.src = '/risala.png';
+// ─── Core renderer: HTML → Canvas → PDF ──────────────────────────────────────
+// Uses html2canvas which reliably renders HTML to canvas. Arabic text renders
+// correctly as long as: (1) font is loaded, (2) direction:rtl is set,
+// (3) NO unicode-bidi property is used.
+
+async function renderToCanvas(container: HTMLElement): Promise<HTMLCanvasElement> {
+  const html2canvas = (await import('html2canvas')).default;
+  return html2canvas(container, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    logging: false,
+    backgroundColor: '#ffffff',
+    width: 794,
+    windowWidth: 794,
   });
 }
 
-// ─── Font CSS builder ────────────────────────────────────────────────────────
-// Builds @font-face CSS with inline base64 data from already-loaded fonts.
-// This avoids getFontEmbedCSS which tries to re-fetch external Google Fonts
-// stylesheets and causes CORS / net::ERR_FAILED console errors.
-async function buildFontCSS(): Promise<string> {
-  const weights = [300, 400, 500, 700, 800, 900];
-  const faces: string[] = [];
-
-  for (const w of weights) {
-    try {
-      const url = `https://fonts.gstatic.com/s/tajawal/v9/Iura6YBj_oCad4k1nzSBC45I.woff2`;
-      const res = await fetch(url, { mode: 'cors' });
-      if (res.ok) {
-        const buf = await res.arrayBuffer();
-        const bytes = new Uint8Array(buf);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-        const b64 = btoa(binary);
-        faces.push(`@font-face{font-family:'Tajawal';font-weight:${w};src:url(data:font/woff2;base64,${b64}) format('woff2');}`);
-      }
-    } catch {
-      // If fetch fails, just declare the font-face without src
-      // The browser will still use the already-loaded font
-    }
-  }
-
-  if (faces.length === 0) {
-    // Fallback: just declare the font family so SVG foreignObject knows about it
-    return `@font-face{font-family:'Tajawal';src:local('Tajawal');}`;
-  }
-  return faces.join('\n');
-}
-
-// ─── Shared HTML-to-PDF renderer ─────────────────────────────────────────────
-// Uses html-to-image (SVG foreignObject) so the BROWSER renders Arabic text
-// natively with full ligature/shaping support. html2canvas cannot do this.
-
-async function htmlToPDF(html: string, filename: string): Promise<void> {
-  const { toPng } = await import('html-to-image');
-
-  // Ensure Tajawal font is fully loaded before rendering
+async function prepareContainer(html: string): Promise<HTMLDivElement> {
+  // Ensure Tajawal font is fully loaded
   await document.fonts.ready;
   try {
     await Promise.all([
@@ -75,13 +32,9 @@ async function htmlToPDF(html: string, filename: string): Promise<void> {
     ]);
   } catch {}
 
-  // Pre-convert logo to data URL for reliable embedding
-  const logoDataUrl = await loadLogoDataUrl();
-  const processedHtml = html.replace(/src="\/risala\.png"/g, `src="${logoDataUrl}"`);
-
   const container = document.createElement('div');
   container.style.cssText = [
-    'position:fixed',
+    'position:absolute',
     'left:-9999px',
     'top:0',
     'width:794px',
@@ -100,59 +53,68 @@ async function htmlToPDF(html: string, filename: string): Promise<void> {
     'overflow-wrap:break-word',
   ].join(';');
 
-  container.innerHTML = processedHtml;
+  container.innerHTML = html;
   document.body.appendChild(container);
 
-  // Force layout so the browser shapes Arabic glyphs
+  // Wait for images and fonts
+  const images = container.querySelectorAll('img');
+  await Promise.all(Array.from(images).map(img =>
+    img.complete ? Promise.resolve() : new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r(); })
+  ));
+
+  // Force layout + wait for font rendering
   container.getBoundingClientRect();
-  await new Promise((r) => setTimeout(r, 300));
+  await new Promise(r => setTimeout(r, 500));
+
+  return container;
+}
+
+async function htmlToPDF(html: string, filename: string): Promise<void> {
+  const container = await prepareContainer(html);
 
   try {
-    // Build font embed CSS from already-loaded fonts (avoids CORS fetch errors
-    // that getFontEmbedCSS causes with external Google Fonts stylesheets)
-    const fontCSS = await buildFontCSS();
-
-    // Capture using SVG foreignObject — browser renders Arabic natively
-    const dataUrl = await toPng(container, {
-      width: 794,
-      pixelRatio: 2,
-      backgroundColor: '#ffffff',
-      fontEmbedCSS: fontCSS,
-    });
-
-    // Load the captured image to get dimensions
-    const captured = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new window.Image();
-      i.onload = () => resolve(i);
-      i.onerror = reject;
-      i.src = dataUrl;
-    });
+    const canvas = await renderToCanvas(container);
 
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const PW = 210; // A4 width mm
-    const PH = 297; // A4 height mm
-    const iw = captured.naturalWidth;
-    const ih = captured.naturalHeight;
-    const scale = PW / iw;
-    const totalH = ih * scale;
+    const PW = 210;
+    const PH = 297;
+    const imgW = canvas.width;
+    const imgH = canvas.height;
+    const ratio = PW / imgW;
+    const totalH = imgH * ratio;
 
     if (totalH <= PH) {
-      pdf.addImage(dataUrl, 'PNG', 0, 0, PW, totalH);
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, PW, totalH);
     } else {
-      const pageHpx = Math.floor(iw * (PH / PW));
-      const pages = Math.ceil(ih / pageHpx);
-      for (let p = 0; p < pages; p++) {
+      // Multi-page: slice the canvas into A4-height chunks
+      const pageHpx = Math.floor(imgW * (PH / PW));
+      const pageCount = Math.ceil(imgH / pageHpx);
+      for (let p = 0; p < pageCount; p++) {
         if (p > 0) pdf.addPage();
-        const ch = Math.min(pageHpx, ih - p * pageHpx);
-        const c = document.createElement('canvas');
-        c.width = iw;
-        c.height = ch;
-        c.getContext('2d')!.drawImage(captured, 0, p * pageHpx, iw, ch, 0, 0, iw, ch);
-        pdf.addImage(c.toDataURL('image/png'), 'PNG', 0, 0, PW, ch * scale);
+        const sliceH = Math.min(pageHpx, imgH - p * pageHpx);
+        const slice = document.createElement('canvas');
+        slice.width = imgW;
+        slice.height = sliceH;
+        slice.getContext('2d')!.drawImage(canvas, 0, p * pageHpx, imgW, sliceH, 0, 0, imgW, sliceH);
+        pdf.addImage(slice.toDataURL('image/png'), 'PNG', 0, 0, PW, sliceH * ratio);
       }
     }
 
     pdf.save(filename);
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+async function htmlToImage(html: string, filename: string): Promise<void> {
+  const container = await prepareContainer(html);
+
+  try {
+    const canvas = await renderToCanvas(container);
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
   } finally {
     document.body.removeChild(container);
   }
@@ -175,7 +137,7 @@ function formatArabicDate(dateStr?: string): string {
 // ─── Shared header with logo ─────────────────────────────────────────────────
 function pdfHeader(title: string, subtitle?: string) {
   return `
-  <div style="background:linear-gradient(135deg,#065f46 0%,#059669 50%,#10b981 100%);padding:0;margin:0;border-radius:0;">
+  <div style="background:linear-gradient(135deg,#065f46 0%,#059669 50%,#10b981 100%);padding:0;margin:0;">
     <table style="width:100%;border-collapse:collapse;direction:rtl;" cellpadding="0" cellspacing="0">
       <tr>
         <td style="width:130px;padding:24px 24px 24px 0;vertical-align:middle;text-align:center;">
@@ -230,7 +192,6 @@ function row(label: string, value: string) {
   </tr>`;
 }
 
-// Wrap entire document body
 function wrapDoc(inner: string) {
   return `<div style="font-family:'Tajawal',sans-serif;direction:rtl;width:794px;box-sizing:border-box;overflow:hidden;">${inner}</div>`;
 }
@@ -310,65 +271,6 @@ export async function exportReportToPDF(
   `);
 
   await htmlToPDF(html, title + '.pdf');
-}
-
-// ─── HTML to Image renderer ──────────────────────────────────────────────────
-async function htmlToImage(html: string, filename: string): Promise<void> {
-  const { toPng } = await import('html-to-image');
-
-  await document.fonts.ready;
-  try {
-    await Promise.all([
-      document.fonts.load('400 20px "Tajawal"'),
-      document.fonts.load('700 20px "Tajawal"'),
-      document.fonts.load('800 20px "Tajawal"'),
-    ]);
-  } catch {}
-
-  const logoDataUrl = await loadLogoDataUrl();
-  const processedHtml = html.replace(/src="\/risala\.png"/g, `src="${logoDataUrl}"`);
-
-  const container = document.createElement('div');
-  container.style.cssText = [
-    'position:fixed',
-    'left:-9999px',
-    'top:0',
-    'width:794px',
-    'background:white',
-    "font-family:'Tajawal',sans-serif",
-    'direction:rtl',
-    'padding:0',
-    'box-sizing:border-box',
-    'color:#1e293b',
-    'font-size:15px',
-    'line-height:1.8',
-    '-webkit-font-smoothing:antialiased',
-    'text-rendering:optimizeLegibility',
-    'word-break:break-word',
-    'overflow-wrap:break-word',
-  ].join(';');
-  container.innerHTML = processedHtml;
-  document.body.appendChild(container);
-
-  await document.fonts.ready;
-  await new Promise((r) => setTimeout(r, 300));
-
-  try {
-    const fontCSS = await buildFontCSS();
-    const dataUrl = await toPng(container, {
-      width: 794,
-      pixelRatio: 3,
-      backgroundColor: '#ffffff',
-      fontEmbedCSS: fontCSS,
-    });
-
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = dataUrl;
-    link.click();
-  } finally {
-    document.body.removeChild(container);
-  }
 }
 
 // ─── Operation Image ──────────────────────────────────────────────────────────
