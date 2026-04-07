@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, query, where, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
 import { CenterInfo, Center, Deployment } from '@/lib/types';
 import Button from '@/components/Button';
 import Modal from '@/components/Modal';
-import { Building2, Phone, Truck, Flame, Shield, Save, Plus, Edit2, Eye, Info, ChevronDown, ChevronUp, FileDown, MapPin, Users, Clock } from 'lucide-react';
+import { Building2, Phone, Truck, Flame, Shield, Save, Plus, Edit2, Eye, Info, ChevronDown, ChevronUp, FileDown, MapPin, Users, Clock, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { exportCenterInfoToPDF, exportDeploymentsToPDF } from '@/lib/pdf-utils';
 
@@ -192,6 +192,28 @@ export default function AdminCenterInfoPage() {
     }
   };
 
+  const handleDeleteCenterInfo = async (id: string, name: string) => {
+    if (!confirm(`هل أنت متأكد من حذف معلومات مركز "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    try {
+      await deleteDoc(doc(db, 'centerInfos', id));
+      toast.success('تم حذف معلومات المركز');
+      fetchData();
+    } catch {
+      toast.error('حدث خطأ أثناء الحذف');
+    }
+  };
+
+  const handleDeleteDeployment = async (id: string) => {
+    if (!confirm('هل أنت متأكد من حذف سجل الانتشار هذا؟ لا يمكن التراجع عن هذا الإجراء.')) return;
+    try {
+      await deleteDoc(doc(db, 'deployments', id));
+      toast.success('تم حذف سجل الانتشار');
+      fetchData();
+    } catch {
+      toast.error('حدث خطأ أثناء الحذف');
+    }
+  };
+
   const filteredInfos = filterCenter ? centerInfos.filter(ci => ci.centerName === filterCenter) : centerInfos;
   const allCenterNames = Array.from(new Set(centerInfos.map(ci => ci.centerName).filter(Boolean)));
 
@@ -262,6 +284,10 @@ export default function AdminCenterInfoPage() {
                 className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-500" title="تصدير PDF"><FileDown size={16} /></button>
               <button onClick={(e) => { e.stopPropagation(); openEdit(info); }}
                 className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-500"><Edit2 size={16} /></button>
+              {profile?.role === 'superadmin' && (
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteCenterInfo(info.id!, info.centerName); }}
+                  className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600" title="حذف"><Trash2 size={16} /></button>
+              )}
               {expandedId === info.id ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
             </div>
           </div>
@@ -355,7 +381,15 @@ export default function AdminCenterInfoPage() {
                               <Clock size={12} className="text-slate-400" />
                               <span className="text-slate-500">{dep.date}</span>
                             </div>
-                            <span className="text-slate-500">{dep.location}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500">{dep.location}</span>
+                              {profile?.role === 'superadmin' && (
+                                <button onClick={() => handleDeleteDeployment(dep.id!)}
+                                  className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600" title="حذف">
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           {dep.vehicleInfo && (
                             <p className="text-slate-500 mb-1">الآلية: <span className="font-medium text-slate-700">{dep.vehicleInfo}</span></p>
