@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, query, where, arrayRemove } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
@@ -103,6 +103,17 @@ export default function AdminMedicsPage() {
   const handleDelete = async (medic: Medic) => {
     if (!confirm(`حذف المسعف "${medic.name}"؟`)) return;
     try {
+      // Remove medic from all duty schedules in their center
+      const schedSnap = await getDocs(query(collection(db, 'schedules'), where('centerId', '==', medic.centerId)));
+      const scheduleUpdates = schedSnap.docs
+        .filter((d) => (d.data().assignedMedics || []).includes(medic.id))
+        .map((d) =>
+          updateDoc(doc(db, 'schedules', d.id), {
+            assignedMedics: arrayRemove(medic.id),
+            assignedMedicNames: arrayRemove(medic.name),
+          })
+        );
+      await Promise.all(scheduleUpdates);
       await deleteDoc(doc(db, 'medics', medic.id));
       toast.success('تم الحذف');
       fetchData();

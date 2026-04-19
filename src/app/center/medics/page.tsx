@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, arrayRemove } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { cachedGetDocs, invalidateCachePrefix } from '@/lib/firebase-cache';
 import { useAuth } from '@/lib/auth-context';
@@ -10,7 +10,7 @@ import { logAudit } from '@/lib/audit';
 import Modal from '@/components/Modal';
 import Button from '@/components/Button';
 import SearchFilter from '@/components/SearchFilter';
-import { Users, Plus, Edit } from 'lucide-react';
+import { Users, Plus, Edit, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function CenterMedicsPage() {
@@ -87,6 +87,27 @@ export default function CenterMedicsPage() {
     } catch (error) { console.error(error); toast.error('حدث خطأ'); } finally { setSaving(false); }
   };
 
+  const handleDelete = async (medic: Medic) => {
+    if (!confirm(`حذف المسعف "${medic.name}"؟`)) return;
+    try {
+      // Remove medic from all duty schedules in the center
+      const schedSnap = await getDocs(query(collection(db, 'schedules'), where('centerId', '==', profile!.centerId)));
+      const scheduleUpdates = schedSnap.docs
+        .filter((d) => (d.data().assignedMedics || []).includes(medic.id))
+        .map((d) =>
+          updateDoc(doc(db, 'schedules', d.id), {
+            assignedMedics: arrayRemove(medic.id),
+            assignedMedicNames: arrayRemove(medic.name),
+          })
+        );
+      await Promise.all(scheduleUpdates);
+      await deleteDoc(doc(db, 'medics', medic.id));
+      toast.success('تم الحذف');
+      logAudit(profile, 'delete', 'medics', `حذف مسعف: ${medic.name}`, medic.id);
+      fetchMedics();
+    } catch { toast.error('خطأ في الحذف'); }
+  };
+
   const roleLabels: Record<string, string> = { medic: 'مسعف', driver: 'سائق', trainer: 'مدرب' };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" /></div>;
@@ -127,7 +148,10 @@ export default function CenterMedicsPage() {
                   <p className="text-xs text-slate-400" dir="ltr">{m.phone || 'لا يوجد رقم'}</p>
                 </div>
               </div>
-              <button onClick={() => openEdit(m)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><Edit size={16} /></button>
+              <div className="flex gap-1">
+                <button onClick={() => openEdit(m)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><Edit size={16} /></button>
+                <button onClick={() => handleDelete(m)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={16} /></button>
+              </div>
             </div>
             <div className="flex gap-2 mt-3">
               <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full">{roleLabels[m.role]}</span>
