@@ -189,46 +189,20 @@ export default function CentersPage() {
   };
 
   const handleDelete = async (center: Center) => {
-    if (!confirm(`هل أنت متأكد من حذف المركز "${center.name}"؟\n\nسيتم حذف جميع البيانات المرتبطة بهذا المركز بشكل نهائي.`)) return;
+    if (!confirm(`هل أنت متأكد من حذف المركز "${center.name}"؟\n\nسيتم إلغاء صلاحيات قائد المركز ولن يتمكن من الدخول مجدداً.\nجميع البيانات التاريخية ستبقى محفوظة في لوحة المشرف.`)) return;
 
     try {
-      const cid = center.id;
-
-      // Collect all sub-collections to delete
-      const collections = [
-        'medics',
-        'schedules',
-        'operations',
-        'centerDamageEvents',
-        'vehicleDamageEvents',
-        'injuredMedicEvents',
-        'martyrMedicEvents',
-        'deployments',
-        'centerInfos',
-      ];
-
-      const deletePromises = collections.map(async (col) => {
-        const snap = await getDocs(query(collection(db, col), where('centerId', '==', cid)));
-        return Promise.all(snap.docs.map((d) => deleteDoc(doc(db, col, d.id))));
-      });
-
-      // Also delete the leader's login sessions and user profile
+      // Delete leader's login sessions and user profile (blocks all future logins)
       if (center.leaderId) {
-        deletePromises.push(
-          getDocs(query(collection(db, 'loginSessions'), where('userId', '==', center.leaderId))).then((snap) =>
-            Promise.all(snap.docs.map((d) => deleteDoc(doc(db, 'loginSessions', d.id))))
-          )
-        );
-        // Delete the leader's Firestore profile (blocks all app access)
-        deletePromises.push(deleteDoc(doc(db, 'users', center.leaderId)) as any);
+        const sessionsSnap = await getDocs(query(collection(db, 'loginSessions'), where('userId', '==', center.leaderId)));
+        await Promise.all(sessionsSnap.docs.map((d) => deleteDoc(doc(db, 'loginSessions', d.id))));
+        await deleteDoc(doc(db, 'users', center.leaderId));
       }
 
-      await Promise.all(deletePromises);
+      // Delete the center document itself
+      await deleteDoc(doc(db, 'centers', center.id));
 
-      // Finally delete the center itself
-      await deleteDoc(doc(db, 'centers', cid));
-
-      toast.success('تم حذف المركز وجميع بياناته بشكل نهائي');
+      toast.success('تم حذف المركز — البيانات التاريخية محفوظة في لوحة المشرف');
       fetchCenters();
     } catch (error) {
       console.error('Error deleting center:', error);
